@@ -25,10 +25,11 @@ interface NavItem {
 }
 
 const MAIN_ITEMS: NavItem[] = [
-  { icon: "home",        label: "Home",           sublabel: "Live signals & chart",            route: "/(tabs)/" },
-  { icon: "layers",      label: "Liquidity",      sublabel: "Order book depth & pressure",     route: "/(tabs)/liquidity" },
-  { icon: "bar-chart-2", label: "Chart Analysis", sublabel: "Independent charting workspace",  route: "/chart-analysis" },
-  { icon: "activity",    label: "Order Flow",     sublabel: "Aggressive flow & delta analysis", route: "/order-flow" },
+  { icon: "home",        label: "Home",                sublabel: "Live signals & chart",              route: "/(tabs)/" },
+  { icon: "layers",      label: "Liquidity",           sublabel: "Order book depth & pressure",       route: "/(tabs)/liquidity" },
+  { icon: "bar-chart-2", label: "Chart Analysis",      sublabel: "Independent charting workspace",    route: "/chart-analysis" },
+  { icon: "activity",    label: "Order Flow",          sublabel: "Aggressive flow & delta analysis",  route: "/order-flow" },
+  { icon: "grid",        label: "Footprint Chart",     sublabel: "Bid/ask volume at each price level", route: "/footprint" },
 ];
 
 const STATS_ITEMS: NavItem[] = [
