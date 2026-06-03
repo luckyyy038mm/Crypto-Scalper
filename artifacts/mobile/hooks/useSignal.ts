@@ -1,3 +1,8 @@
+/**
+ * Advanced Signal Engine
+ * Real-time signal generation with multi-timeframe analysis and cross-system integration
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { BinanceData } from "./useBinanceData";
@@ -58,7 +63,6 @@ export interface SetupTriggers {
 }
 
 export interface SignalAnalysis {
-  /* Legacy fields — preserved for all existing consumers */
   signal: Signal;
   totalScore: number;
   maxTotalScore: number;
@@ -72,8 +76,6 @@ export interface SignalAnalysis {
   entry: EntryAnalysis | null;
   ready: boolean;
   lastUpdated: number;
-
-  /* ── New quality-first fields ── */
   signalQualityScore: number;
   qualityCategory: QualityCategory;
   signalTimeframe: SignalTimeframe;
@@ -86,7 +88,7 @@ export interface SignalAnalysis {
   signalExplanation: string[];
 }
 
-/* ── Kline ─────────────────────────────────────────────────────────── */
+/* ── Kline interface for real-time updates ────────────────────────── */
 
 interface Kline {
   high: number;
@@ -151,17 +153,19 @@ function qualityCategory(score: number): QualityCategory {
 }
 
 /* ── Quality-weighted factor system ─────────────────────────────────── */
-/*
-  8 factors, weights sum to 100.
-  Each factor contributes its weight when the condition is met for the evaluated direction.
-*/
 
 interface QFactor {
   name: string;
-  weight: number;  // out of 100
+  weight: number;
   met: boolean;
   reason: string;
   sentiment: "bullish" | "bearish" | "neutral";
+}
+
+function computeQualityScore(factors: QFactor[]): number {
+  const totalWeight = factors.reduce((s, f) => s + f.weight, 0);
+  const metWeight = factors.filter(f => f.met).reduce((s, f) => s + f.weight, 0);
+  return totalWeight > 0 ? Math.round((metWeight / totalWeight) * 100) : 0;
 }
 
 function buildQualityFactors(

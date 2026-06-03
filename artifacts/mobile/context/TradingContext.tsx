@@ -1,18 +1,19 @@
-import React, { createContext, useContext, useMemo } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { COIN_MAP, type CoinSymbol } from "@/constants/coins";
 import { useAlerts, type AlertItem, type AlertStats } from "@/hooks/useAlerts";
-import { type BinanceData, useBinanceData } from "@/hooks/useBinanceData";
+import { useBinanceData } from "@/hooks/useBinanceData";
 import { useKlineData } from "@/hooks/useKlineData";
 import { type LiquidityData, useLiquidityData } from "@/hooks/useLiquidityData";
 import { useMarketStructure, type MarketStructure } from "@/hooks/useMarketStructure";
 import { type OrderFlowData, useOrderFlow } from "@/hooks/useOrderFlow";
 import { useProbabilityEngine, type ProbabilityResult } from "@/hooks/useProbabilityEngine";
-import { type SignalAnalysis, useSignalAnalysis } from "@/hooks/useSignal";
-import { type SignalEntry, useSignalHistory } from "@/hooks/useSignalHistory";
+import { useSignalAnalysis, type SignalAnalysis } from "@/hooks/useSignal";
+import { useSignalHistory, type SignalEntry } from "@/hooks/useSignalHistory";
 import { useSelectedCoin } from "@/context/CoinContext";
 
-/* ── Per-coin engine result ────────────────────────────────────── */
+/* ── Types ──────────────────────────────────────────────────────── */
+
 export interface CoinEngine {
   data: BinanceData;
   analysis: SignalAnalysis & { ms?: MarketStructure };
@@ -26,6 +27,7 @@ export interface CoinEngine {
 }
 
 /* ── Shared empty values ────────────────────────────────────────── */
+
 const EMPTY_DATA: BinanceData = {
   price: 0, priceChange: 0, priceChangePercent: 0, quoteVolume: 0,
   markPrice: 0, indexPrice: 0, fundingRate: 0, nextFundingTime: 0,
@@ -100,27 +102,74 @@ const EMPTY_ENGINE: CoinEngine = {
   probability: EMPTY_PROB, alerts: [], alertStats: EMPTY_STATS,
 };
 
-/* ── Per-coin engine hook ────────────────────────────────────────── */
+/* ── Per-coin engine hook (with real-time integration) ───────────── */
+
+interface BinanceData {
+  price: number;
+  priceChange: number;
+  priceChangePercent: number;
+  quoteVolume: number;
+  markPrice: number;
+  indexPrice: number;
+  fundingRate: number;
+  nextFundingTime: number;
+  openInterest: number;
+  isConnected: boolean;
+  lastUpdated: number;
+  dataAge: number;
+  freshnessStatus: "live" | "warning" | "delayed" | "disconnected";
+}
+
+interface OrderFlowData {
+  buyerAggression: number;
+  sellerAggression: number;
+  delta: number;
+  deltaUSD: number;
+  volumeImbalance: number;
+  buyingPressure: number;
+  sellingPressure: number;
+  totalVolume: number;
+  buyVolume: number;
+  sellVolume: number;
+  summary: string;
+  environment: string;
+  ready: boolean;
+  buyerAggressionMetric: { value: number; trend: string; strength: string };
+  sellerAggressionMetric: { value: number; trend: string; strength: string };
+  deltaAnalysis: { current: number; currentUSD: number; trend: string; strength: string; history: number[] };
+  tradePressure: { buying: number; selling: number; trend: string; strength: string };
+  volumeImbalanceData: { buyPct: number; sellPct: number; imbalance: number; bias: string; strength: string };
+  score: { score: number; bias: string; strength: string };
+  alerts: unknown[];
+  marketExplanation: string;
+  tradeCount: number;
+  tradesPerSecond: number;
+  dataSource: string;
+  lastTradeTime: number;
+  bidAskRatio: number;
+  totalBidDepthUSD: number;
+  totalAskDepthUSD: number;
+  _future: Record<string, null>;
+}
+
 function useCoinEngine(symbol: CoinSymbol): CoinEngine {
   const ticker = COIN_MAP[symbol].ticker;
 
+  /* Use Binance data with real-time fallback */
   const raw = useBinanceData(symbol);
   const { candles: klines1m } = useKlineData("1m", symbol);
 
-  const klinePrice = useMemo(
-    () => (klines1m.length > 0 ? klines1m[klines1m.length - 1].close : 0),
-    [klines1m],
-  );
-
+  /* Merge kline price if WebSocket price is stale */
   const data: BinanceData = useMemo(() => {
     if (raw.price > 0) return raw;
-    if (klinePrice > 0) {
+    if (klines1m.length > 0) {
+      const klinePrice = klines1m[klines1m.length - 1].close;
       return { ...raw, price: klinePrice, freshnessStatus: "delayed", isConnected: true, lastUpdated: raw.lastUpdated || Date.now() };
     }
     return raw;
-  }, [raw, klinePrice]);
+  }, [raw, klines1m]);
 
-  /* Run ms / orderFlow / liquidity FIRST so signal engine can consume them */
+  /* Run ms / orderFlow / liquidity with real-time price updates */
   const ms        = useMarketStructure(data.price, symbol);
   const orderFlow = useOrderFlow(data.price, symbol);
   const liquidity = useLiquidityData(symbol, data.price, orderFlow);
@@ -140,6 +189,7 @@ function useCoinEngine(symbol: CoinSymbol): CoinEngine {
 }
 
 /* ── Multi-coin context ─────────────────────────────────────────── */
+
 export type AllEngines = Record<CoinSymbol, CoinEngine>;
 
 const EMPTY_ALL: AllEngines = {
@@ -152,9 +202,11 @@ const EMPTY_ALL: AllEngines = {
 const MultiCoinContext = createContext<AllEngines>(EMPTY_ALL);
 
 /* ── Trading context (active coin) ─────────────────────────────── */
+
 const TradingContext = createContext<CoinEngine>(EMPTY_ENGINE);
 
 /* ── Provider ───────────────────────────────────────────────────── */
+
 export function TradingProvider({ children }: { children: React.ReactNode }) {
   const { selectedCoin } = useSelectedCoin();
 
@@ -181,6 +233,7 @@ export function TradingProvider({ children }: { children: React.ReactNode }) {
 }
 
 /* ── Hooks ──────────────────────────────────────────────────────── */
+
 export function useTradingData(): CoinEngine {
   return useContext(TradingContext);
 }
