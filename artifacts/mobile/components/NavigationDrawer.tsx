@@ -6,6 +6,7 @@ import {
   Animated,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableWithoutFeedback,
@@ -36,6 +37,9 @@ const STATS_ITEMS: NavItem[] = [
   { icon: "book",      label: "Trade Journal",   sublabel: "Log & review your trades",     route: "/journal" },
   { icon: "activity",  label: "Performance",     sublabel: "Stats, streaks & analytics",   route: "/performance" },
   { icon: "cpu",       label: "Paper Trading",   sublabel: "Test signals, no real funds",  route: "/paper-trading" },
+  { icon: "trending-up", label: "Performance Center", sublabel: "Detailed performance analytics", route: "/performance-center" },
+  { icon: "zap",       label: "AI Trade Coach",  sublabel: "Market bias & opportunity",    route: "/ai-trade-coach" },
+  { icon: "search",    label: "Market Scanner",  sublabel: "Multi-coin opportunity ranking", route: "/market-scanner" },
 ];
 
 const FUTURE_ITEMS: NavItem[] = [
@@ -140,14 +144,19 @@ export default function NavigationDrawer() {
           </Pressable>
         </View>
 
-        {/* Navigation items */}
-        <View style={styles.nav}>
+        {/* Navigation items - SCROLLABLE */}
+        <ScrollView
+          style={styles.navContainer}
+          contentContainerStyle={styles.navContent}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={true}
+        >
           {renderSection("TRADING", MAIN_ITEMS)}
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           {renderSection("STATISTICS & MANAGEMENT", STATS_ITEMS)}
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           {renderSection("ACCOUNT", FUTURE_ITEMS, true)}
-        </View>
+        </ScrollView>
 
         {/* Footer */}
         <View style={[styles.footer, { borderTopColor: colors.border, paddingBottom: insets.bottom + 12 }]}>
@@ -196,7 +205,16 @@ const styles = StyleSheet.create({
   appSub: { fontSize: 10, fontFamily: "Inter_400Regular", letterSpacing: 0.3 },
   closeBtn: { padding: 4 },
 
-  nav: { flex: 1, paddingTop: 8 },
+  /* Scrollable navigation container */
+  navContainer: {
+    flex: 1,
+    overflow: "visible",
+  },
+  navContent: {
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+
   section: { paddingHorizontal: 12, paddingVertical: 8 },
   sectionLabel: {
     fontSize: 9,
