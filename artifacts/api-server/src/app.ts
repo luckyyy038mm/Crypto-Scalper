@@ -1,31 +1,31 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
-import type { HttpLogger } from "pino-http";
-import pinoHttp from "pino-http";
+import * as pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
 
-const httpLogger: HttpLogger = pinoHttp({
-  logger,
-  serializers: {
-    req(req: Request) {
-      return {
-        id: (req as any).id,
-        method: req.method,
-        url: req.url?.split("?")[0],
-      };
+app.use(
+  pinoHttp.default({
+    logger,
+    serializers: {
+      req(req: Request) {
+        return {
+          id: (req as any).id,
+          method: req.method,
+          url: req.url?.split("?")[0],
+        };
+      },
+      res(res: Response) {
+        return {
+          statusCode: res.statusCode,
+        };
+      },
     },
-    res(res: Response) {
-      return {
-        statusCode: res.statusCode,
-      };
-    },
-  },
-});
+  }),
+);
 
-app.use(httpLogger);
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
