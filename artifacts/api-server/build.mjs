@@ -31,6 +31,7 @@ async function buildAll() {
     external: [
       "*.node",
       "pino-pretty",
+      "pino-http",
       "sharp",
       "better-sqlite3",
       "sqlite3",
