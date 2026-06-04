@@ -260,7 +260,7 @@ export default function CandleChart({
           {slLine && (
             <Line x1={0} y1={slLine.y} x2={chartW} y2={slLine.y}
               stroke={downColor} strokeWidth={1.5} strokeDasharray="6,3" opacity={0.9} />
-          ))}
+          )}
           {/* Take profit lines */}
           {tpLines.map((l, i) => (
             <Line key={`tp${i}`} x1={0} y1={l.y} x2={chartW} y2={l.y}

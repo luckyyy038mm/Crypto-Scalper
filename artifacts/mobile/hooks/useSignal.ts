@@ -300,12 +300,6 @@ function buildQualityFactors(
   return factors;
 }
 
-/* ── Signal Quality Score ────────────────────────────────────────────── */
-
-function computeQualityScore(factors: QFactor[]): number {
-  return Math.round(factors.filter((f) => f.met).reduce((s, f) => s + f.weight, 0));
-}
-
 /* ── Timeframe detection from market structure ───────────────────────── */
 
 function detectSignalTimeframe(isLong: boolean, ms?: MarketStructure): SignalTimeframe {

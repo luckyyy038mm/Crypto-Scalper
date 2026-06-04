@@ -59,6 +59,7 @@ export interface TickerData {
 export interface RealTimeData {
   symbol: string;
   price: number;
+  openPrice: number;
   priceChange: number;
   priceChangePercent: number;
   quoteVolume: number;
@@ -158,6 +159,7 @@ const RealtimeDataContext = createContext<RealtimeContextValue>({
   getData: () => ({
     symbol: "",
     price: 0,
+    openPrice: 0,
     priceChange: 0,
     priceChangePercent: 0,
     quoteVolume: 0,
@@ -191,6 +193,7 @@ const RealtimeDataContext = createContext<RealtimeContextValue>({
 const EMPTY_DATA: RealTimeData = {
   symbol: "",
   price: 0,
+  openPrice: 0,
   priceChange: 0,
   priceChangePercent: 0,
   quoteVolume: 0,

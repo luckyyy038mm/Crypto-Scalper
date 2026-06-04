@@ -120,37 +120,7 @@ interface BinanceData {
   freshnessStatus: "live" | "warning" | "delayed" | "disconnected";
 }
 
-interface OrderFlowData {
-  buyerAggression: number;
-  sellerAggression: number;
-  delta: number;
-  deltaUSD: number;
-  volumeImbalance: number;
-  buyingPressure: number;
-  sellingPressure: number;
-  totalVolume: number;
-  buyVolume: number;
-  sellVolume: number;
-  summary: string;
-  environment: string;
-  ready: boolean;
-  buyerAggressionMetric: { value: number; trend: string; strength: string };
-  sellerAggressionMetric: { value: number; trend: string; strength: string };
-  deltaAnalysis: { current: number; currentUSD: number; trend: string; strength: string; history: number[] };
-  tradePressure: { buying: number; selling: number; trend: string; strength: string };
-  volumeImbalanceData: { buyPct: number; sellPct: number; imbalance: number; bias: string; strength: string };
-  score: { score: number; bias: string; strength: string };
-  alerts: unknown[];
-  marketExplanation: string;
-  tradeCount: number;
-  tradesPerSecond: number;
-  dataSource: string;
-  lastTradeTime: number;
-  bidAskRatio: number;
-  totalBidDepthUSD: number;
-  totalAskDepthUSD: number;
-  _future: Record<string, null>;
-}
+/* ── Hook ─────────────────────────────────────────────────────────── */
 
 function useCoinEngine(symbol: CoinSymbol): CoinEngine {
   const ticker = COIN_MAP[symbol].ticker;

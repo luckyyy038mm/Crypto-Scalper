@@ -78,6 +78,14 @@ class BinanceWsManager {
     return BinanceWsManager.instance;
   }
 
+  getSubscriptionCount(): number {
+    return this.subscriptions.size;
+  }
+
+  getSubscriptions(): Map<string, WsSubscription> {
+    return this.subscriptions;
+  }
+
   subscribe<T>(id: string, url: string, handler: MessageHandler<T>): () => void {
     let sub = this.subscriptions.get(id);
     
@@ -173,11 +181,11 @@ export function useBinanceWsManager() {
 
   useEffect(() => {
     const checkInterval = setInterval(() => {
-      const subs = managerRef.current.subscriptions;
+      const count = managerRef.current.getSubscriptionCount();
       setState({
-        isConnected: subs.size > 0,
+        isConnected: count > 0,
         lastUpdate: Date.now(),
-        subscriptions: subs.size,
+        subscriptions: count,
       });
     }, 5000);
 
