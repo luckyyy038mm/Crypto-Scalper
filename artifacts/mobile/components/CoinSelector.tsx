@@ -172,9 +172,9 @@ export default function CoinSelector({ compact = false }: CoinSelectorProps) {
         </Pressable>
       )}
 
-      {/* Bottom Sheet Modal */}
+      {/* Bottom Sheet Modal - Uses Portal pattern to render at top level */}
       {showModal && (
-        <View style={StyleSheet.absoluteFillObject}>
+        <View style={styles.modalPortal}>
           {/* Backdrop */}
           <Animated.View
             style={[styles.backdrop, { opacity: backdropOpacity }]}
@@ -256,6 +256,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 20,
     borderWidth: 1,
+    zIndex: 1,
   },
   compactText: {
     fontSize: 12,
@@ -277,6 +278,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
+    zIndex: 1,
   },
   selectorLeft: {
     flexDirection: "row",
@@ -323,10 +325,14 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
   },
 
-  /* Modal styles */
+  /* Modal styles - fixed z-index for proper layering */
+  modalPortal: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+  },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.6)",
   },
   modal: {
     position: "absolute",
@@ -336,6 +342,12 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: "70%",
+    zIndex: 101,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   handle: {
     alignItems: "center",
