@@ -37,8 +37,6 @@ const STATS_ITEMS: NavItem[] = [
   { icon: "book",      label: "Trade Journal",   sublabel: "Log & review your trades",     route: "/journal" },
   { icon: "activity",  label: "Performance",     sublabel: "Stats, streaks & analytics",   route: "/performance" },
   { icon: "cpu",       label: "Paper Trading",   sublabel: "Test signals, no real funds",  route: "/paper-trading" },
-  { icon: "trending-up", label: "Performance Center", sublabel: "Detailed performance analytics", route: "/performance-center" },
-  { icon: "zap",       label: "AI Trade Coach",  sublabel: "Market bias & opportunity",    route: "/ai-trade-coach" },
   { icon: "search",    label: "Market Scanner",  sublabel: "Multi-coin opportunity ranking", route: "/market-scanner" },
 ];
 
