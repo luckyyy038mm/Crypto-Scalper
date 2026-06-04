@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useMultiCoinData, useTradingData } from "@/context/TradingContext";
+import { useSelectedCoin } from "@/context/CoinContext";
 import { useBinanceData } from "@/hooks/useBinanceData";
 import { useAutoTrader } from "@/hooks/useAutoTrader";
 import { useColors } from "@/hooks/useColors";
@@ -487,6 +488,9 @@ export default function PaperTradingScreen() {
   const { selectedCoin, setCoin } = useSelectedCoin();
   const [autoTradeEnabled, setAutoTrade] = useState(false);
   const [autoThreshold, setAutoThreshold] = useState(62);
+  
+  // Persistent Signal Follow State
+  const [sfState, setSfState] = useState<PersistedSignalFollow>(DEFAULT_SF_STATE);
   
   // Load persisted state on mount
   useEffect(() => {
