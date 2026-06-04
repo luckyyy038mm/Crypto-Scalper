@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Platform,
@@ -36,7 +37,30 @@ import {
   type PaperDirection,
   type PaperPosition,
   type PaperTrade,
+  type TradeMode,
+  type MarketRegime,
+  REGIME_LABELS,
 } from "@/hooks/usePaperTrading";
+
+/* ── Persistent Signal Follow State ──────────────────────────── */
+
+const SIGNAL_FOLLOW_KEY = "pt_signal_follow_state";
+
+interface PersistedSignalFollow {
+  enabled: boolean;
+  mode: TradeMode;
+  leverage: number;
+  riskPct: number;
+  selectedCoins: PaperCoin[];
+}
+
+const DEFAULT_SF_STATE: PersistedSignalFollow = {
+  enabled: false,
+  mode: "manual",
+  leverage: 5,
+  riskPct: 10,
+  selectedCoins: [...PAPER_COINS],
+};
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
 
@@ -59,12 +83,16 @@ function fmtPrice(p: number) {
   return p.toFixed(4);
 }
 
-type Tab = "trade" | "history" | "stats" | "signals";
+type Tab = "trade" | "history" | "stats" | "signals" | "modes" | "killswitch" | "regime" | "reviews";
 const TABS: { id: Tab; label: string }[] = [
-  { id: "trade",   label: "Trade"   },
-  { id: "history", label: "History" },
-  { id: "stats",   label: "Stats"   },
-  { id: "signals", label: "Signals" },
+  { id: "trade",      label: "Trade"      },
+  { id: "history",    label: "History"    },
+  { id: "stats",      label: "Stats"      },
+  { id: "modes",      label: "Modes"      },
+  { id: "killswitch", label: "Kill"      },
+  { id: "regime",     label: "Regime"     },
+  { id: "reviews",    label: "Reviews"    },
+  { id: "signals",    label: "Signals"    },
 ];
 
 /* ── Sub-components ──────────────────────────────────────────────── */
@@ -442,11 +470,37 @@ export default function PaperTradingScreen() {
 
   const [activeTab, setActiveTab]       = useState<Tab>("trade");
   const [selectedCoin, setSelectedCoin] = useState<PaperCoin>("BTCUSDT");
-  const [signalFollow, setSignalFollow] = useState(false);
-  const [followLeverage, setFollowLev]  = useState<LeverageValue>(2);
-  const [followRisk, setFollowRisk]     = useState(10);
+  
+  // Persistent Signal Follow State
+  const [sfState, setSfState] = useState<PersistedSignalFollow>(DEFAULT_SF_STATE);
   const [autoTradeEnabled, setAutoTrade] = useState(false);
   const [autoThreshold, setAutoThreshold] = useState(62);
+  
+  // Load persisted state on mount
+  useEffect(() => {
+    AsyncStorage.getItem(SIGNAL_FOLLOW_KEY).then((raw) => {
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          setSfState({ ...DEFAULT_SF_STATE, ...parsed });
+        } catch {}
+      }
+    });
+  }, []);
+
+  // Persist signal follow state changes
+  const persistSfState = (next: PersistedSignalFollow) => {
+    setSfState(next);
+    AsyncStorage.setItem(SIGNAL_FOLLOW_KEY, JSON.stringify(next)).catch(() => {});
+  };
+
+  const signalFollow = sfState.enabled;
+  const followLeverage = sfState.leverage as LeverageValue;
+  const followRisk = sfState.riskPct;
+  
+  const toggleSignalFollow = (enabled: boolean) => {
+    persistSfState({ ...sfState, enabled });
+  };
 
   /* Live prices for all coins */
   const btcData = useBinanceData("BTCUSDT");
@@ -481,14 +535,36 @@ export default function PaperTradingScreen() {
   const {
     loaded, positions, history, cashBalance, analytics,
     openTrade, closeTrade, moveStopLoss, adjustTakeProfit, resetAccount, followSignal,
-    prevSignalRef,
+    prevSignalRef, detectMarketRegime, killSwitchConfig,
   } = usePaperTrading(prices);
 
-  /* Signal follow — trigger when signal changes */
+  const modeStats = analytics.modeStats;
+  const regimeStats = analytics.regimeStats;
+
+  // Detect current market regime
+  const btcRegime = useMemo(() => {
+    return detectMarketRegime(
+      btcData.priceChangePercent,
+      btcData.quoteVolume,
+      0, // funding rate not available
+    );
+  }, [btcData.priceChangePercent, btcData.quoteVolume]);
+
+  /* Signal follow — trigger when signal changes (persistent) */
   const prevSignal = prevSignalRef.current;
   if (signalFollow && currentSignal !== "WAIT" && currentSignal !== prevSignal) {
     prevSignalRef.current = currentSignal;
-    followSignal({ coin: selectedCoin, signal: currentSignal as "LONG" | "SHORT", leverage: followLeverage, riskPct: followRisk });
+    followSignal({ 
+      coin: selectedCoin, 
+      signal: currentSignal as "LONG" | "SHORT", 
+      leverage: followLeverage, 
+      riskPct: followRisk,
+      timeframe: sfState.mode === "scalper" ? "5m" : "1h",
+      signalQuality: signalAnalysis.signalQualityScore ?? 50,
+      confidence: signalAnalysis.totalScore ?? 50,
+      probability: signalAnalysis.totalScore ?? 50,
+      marketRegime: btcRegime.regime,
+    });
   } else if (currentSignal !== prevSignal) {
     prevSignalRef.current = currentSignal;
   }
@@ -612,12 +688,12 @@ export default function PaperTradingScreen() {
                 <View>
                   <Text style={[s.followTitle, { color: colors.foreground }]}>Signal Follow Mode</Text>
                   <Text style={[s.followSub, { color: colors.mutedForeground }]}>
-                    Auto-trade {COIN_LABEL[selectedCoin]} signals
+                    {signalFollow ? `Active · Mode: ${sfState.mode.toUpperCase()}` : "Persistent across sessions"}
                   </Text>
                 </View>
                 <Switch
                   value={signalFollow}
-                  onValueChange={setSignalFollow}
+                  onValueChange={toggleSignalFollow}
                   thumbColor={signalFollow ? colors.primary : "#6B7280"}
                   trackColor={{ false: colors.border, true: colors.primary + "88" }}
                 />
@@ -632,13 +708,25 @@ export default function PaperTradingScreen() {
               {signalFollow && (
                 <View style={s.followConfig}>
                   <View style={s.followRow}>
+                    <Text style={[s.followConfigLabel, { color: colors.mutedForeground }]}>Mode</Text>
+                    <View style={s.levRowSmall}>
+                      {(["scalper", "normal", "manual"] as const).map((m) => (
+                        <Pressable key={m} onPress={() => persistSfState({ ...sfState, mode: m })}
+                          style={[s.levBtnSm, { borderColor: colors.border }, sfState.mode === m && { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
+                        >
+                          <Text style={[s.levTextSm, { color: sfState.mode === m ? colors.primary : colors.mutedForeground }]}>{m}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={s.followRow}>
                     <Text style={[s.followConfigLabel, { color: colors.mutedForeground }]}>Leverage</Text>
                     <View style={s.levRowSmall}>
-                      {([1, 2, 3, 5] as LeverageValue[]).map((lev) => (
-                        <Pressable key={lev} onPress={() => setFollowLev(lev)}
-                          style={[s.levBtnSm, { borderColor: colors.border }, followLeverage === lev && { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
+                      {([2, 3, 5, 10, 20] as const).map((lev) => (
+                        <Pressable key={lev} onPress={() => persistSfState({ ...sfState, leverage: lev })}
+                          style={[s.levBtnSm, { borderColor: colors.border }, sfState.leverage === lev && { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
                         >
-                          <Text style={[s.levTextSm, { color: followLeverage === lev ? colors.primary : colors.mutedForeground }]}>{lev}×</Text>
+                          <Text style={[s.levTextSm, { color: sfState.leverage === lev ? colors.primary : colors.mutedForeground }]}>{lev}×</Text>
                         </Pressable>
                       ))}
                     </View>
@@ -647,17 +735,17 @@ export default function PaperTradingScreen() {
                     <Text style={[s.followConfigLabel, { color: colors.mutedForeground }]}>Risk per trade</Text>
                     <View style={s.levRowSmall}>
                       {[5, 10, 15, 20].map((r) => (
-                        <Pressable key={r} onPress={() => setFollowRisk(r)}
-                          style={[s.levBtnSm, { borderColor: colors.border }, followRisk === r && { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
+                        <Pressable key={r} onPress={() => persistSfState({ ...sfState, riskPct: r })}
+                          style={[s.levBtnSm, { borderColor: colors.border }, sfState.riskPct === r && { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
                         >
-                          <Text style={[s.levTextSm, { color: followRisk === r ? colors.primary : colors.mutedForeground }]}>{r}%</Text>
+                          <Text style={[s.levTextSm, { color: sfState.riskPct === r ? colors.primary : colors.mutedForeground }]}>{r}%</Text>
                         </Pressable>
                       ))}
                     </View>
                   </View>
-                  <Text style={[s.followNote, { color: colors.mutedForeground }]}>
-                    Signals only tracked while this screen is open.
-                  </Text>
+                  <View style={[s.followNoteContainer, { backgroundColor: colors.up + "15", padding: 8, borderRadius: 8, marginTop: 8 }]}>
+                    <Text style={[s.followNotePersistent, { color: colors.up }]}>✓ Signal Follow is persistent! It stays on when you leave this screen.</Text>
+                  </View>
                 </View>
               )}
             </View>
@@ -895,6 +983,161 @@ export default function PaperTradingScreen() {
             </View>
           </>
         )}
+
+        {/* ── MODES TAB ─────────────────────────────────────── */}
+        {activeTab === "modes" && (
+          <>
+            <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+              <Text style={[s.cardTitle, { color: colors.mutedForeground }]}>SCALPER MODE</Text>
+              <View style={s.statsGrid}>
+                <StatCell label="Scalper Trades" value={`${modeStats?.scalper?.totalTrades ?? 0}`} colors={colors} />
+                <StatCell label="Win Rate" value={modeStats?.scalper?.winRate ? `${modeStats.scalper.winRate.toFixed(1)}%` : "—"} color={modeStats?.scalper?.winRate >= 50 ? colors.up : colors.down} colors={colors} />
+                <StatCell label="Profit Factor" value={modeStats?.scalper?.profitFactor ? modeStats.scalper.profitFactor.toFixed(2) : "—"} colors={colors} />
+                <StatCell label="Avg Duration" value={modeStats?.scalper?.avgDuration ? fmtDur(modeStats.scalper.avgDuration) : "—"} colors={colors} />
+                <StatCell label="Total PnL" value={modeStats?.scalper?.totalPnl ? fmt$(modeStats.scalper.totalPnl) : "—"} color={modeStats?.scalper?.totalPnl >= 0 ? colors.up : colors.down} colors={colors} />
+              </View>
+              <Text style={[s.noteText, { color: colors.mutedForeground, marginTop: 8 }]}>Focus: 1m, 5m, 15m timeframes. Fast entries, higher frequency.</Text>
+            </View>
+            
+            <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+              <Text style={[s.cardTitle, { color: colors.mutedForeground }]}>NORMAL MODE</Text>
+              <View style={s.statsGrid}>
+                <StatCell label="Normal Trades" value={`${modeStats?.normal?.totalTrades ?? 0}`} colors={colors} />
+                <StatCell label="Win Rate" value={modeStats?.normal?.winRate ? `${modeStats.normal.winRate.toFixed(1)}%` : "—"} color={modeStats?.normal?.winRate >= 50 ? colors.up : colors.down} colors={colors} />
+                <StatCell label="Profit Factor" value={modeStats?.normal?.profitFactor ? modeStats.normal.profitFactor.toFixed(2) : "—"} colors={colors} />
+                <StatCell label="Avg Duration" value={modeStats?.normal?.avgDuration ? fmtDur(modeStats.normal.avgDuration) : "—"} colors={colors} />
+                <StatCell label="Total PnL" value={modeStats?.normal?.totalPnl ? fmt$(modeStats.normal.totalPnl) : "—"} color={modeStats?.normal?.totalPnl >= 0 ? colors.up : colors.down} colors={colors} />
+              </View>
+              <Text style={[s.noteText, { color: colors.mutedForeground, marginTop: 8 }]}>Focus: 15m, 1h, 4h timeframes. Higher quality setups.</Text>
+            </View>
+          </>
+        )}
+
+        {/* ── KILLSWITCH TAB ─────────────────────────────────────── */}
+        {activeTab === "killswitch" && (
+          <>
+            <View style={[s.card, { backgroundColor: analytics.settings?.killSwitchActive ? colors.down + "22" : colors.card, borderColor: analytics.settings?.killSwitchActive ? colors.down + "44" : colors.cardBorder }]}>
+              <Text style={[s.cardTitle, { color: analytics.settings?.killSwitchActive ? colors.down : colors.mutedForeground }]}>KILL SWITCH</Text>
+              <View style={s.statsGrid}>
+                <StatCell label="Status" value={analytics.settings?.killSwitchActive ? "ACTIVE" : "INACTIVE"} color={analytics.settings?.killSwitchActive ? colors.down : colors.up} colors={colors} />
+                {analytics.settings?.killSwitchReason && (
+                  <StatCell label="Reason" value={analytics.settings.killSwitchReason} color={colors.down} colors={colors} />
+                )}
+              </View>
+            </View>
+            <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+              <Text style={[s.cardTitle, { color: colors.mutedForeground }]}>CONFIGURED LIMITS</Text>
+              <View style={s.statsGrid}>
+                <StatCell label="Max Consecutive Losses" value={`${killSwitchConfig?.maxConsecutiveLosses ?? 3}`} colors={colors} />
+                <StatCell label="Max Daily Loss ($)" value={`$${killSwitchConfig?.maxDailyLoss ?? 20}`} colors={colors} />
+                <StatCell label="Max Drawdown (%)" value={`${killSwitchConfig?.maxDailyDrawdown ?? 25}%`} colors={colors} />
+                <StatCell label="Max Losing Trades/Day" value={`${killSwitchConfig?.maxLosingTradesPerDay ?? 5}`} colors={colors} />
+                <StatCell label="Recovery Mode" value={killSwitchConfig?.recoveryMode ?? "manual"} colors={colors} />
+              </View>
+            </View>
+          </>
+        )}
+
+        {/* ── REGIME TAB ─────────────────────────────────────── */}
+        {activeTab === "regime" && (
+          <>
+            <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+              <Text style={[s.cardTitle, { color: colors.mutedForeground }]}>CURRENT REGIME</Text>
+              <View style={[s.regimeHeader, { backgroundColor: colors.primary + "15", padding: 16, borderRadius: 12, alignItems: "center" }]}>
+                <Text style={[s.regimeName, { color: colors.primary }]}>{REGIME_LABELS[btcRegime.regime] ?? "Unknown"}</Text>
+                <Text style={[s.regimeConf, { color: colors.mutedForeground }]}>Confidence: {btcRegime.confidence}%</Text>
+              </View>
+              <Text style={[s.noteText, { color: colors.mutedForeground, marginTop: 12 }]}>{btcRegime.explanation}</Text>
+            </View>
+            <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+              <Text style={[s.cardTitle, { color: colors.mutedForeground }]}>REGIME PERFORMANCE</Text>
+              {Object.entries(regimeStats as Record<string, { totalTrades: number; winRate: number; totalPnl: number }> ?? {}).filter(([_, v]) => v.totalTrades > 0).map(([key, stats]) => (
+                <View key={key} style={[s.regimeRow, { borderBottomColor: colors.border }]}>
+                  <Text style={[s.regimeLabel, { color: colors.foreground }]}>{REGIME_LABELS[key as MarketRegime] ?? key}</Text>
+                  <Text style={[s.regimeStat, { color: colors.mutedForeground }]}>{stats.totalTrades} trades</Text>
+                  <Text style={[s.regimeStat, { color: stats.winRate >= 50 ? colors.up : colors.down }]}>{stats.winRate.toFixed(0)}%</Text>
+                  <Text style={[s.regimeStat, { color: stats.totalPnl >= 0 ? colors.up : colors.down }]}>{fmt$(stats.totalPnl)}</Text>
+                </View>
+              ))}
+              {Object.values(regimeStats as Record<string, { totalTrades: number }> ?? {}).filter(v => v.totalTrades > 0).length === 0 && (
+                <Text style={[s.emptyText, { color: colors.mutedForeground }]}>No regime data yet. Trade to build statistics.</Text>
+              )}
+            </View>
+          </>
+        )}
+
+        {/* ── REVIEWS TAB ─────────────────────────────────────── */}
+        {activeTab === "reviews" && (
+          <>
+            <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+              <Text style={[s.cardTitle, { color: colors.mutedForeground }]}>TRADE REVIEWS</Text>
+              {history.length === 0 ? (
+                <Text style={[s.emptyText, { color: colors.mutedForeground }]}>No trades completed yet.</Text>
+              ) : (
+                history.slice(0, 20).map((trade) => (
+                  <View key={trade.id} style={[s.reviewItem, { borderBottomColor: colors.border }]}>
+                    <View style={s.reviewHeader}>
+                      <View style={[s.dirBadge, { backgroundColor: trade.direction === "LONG" ? colors.up + "22" : colors.down + "22" }]}>
+                        <Text style={[s.dirText, { color: trade.direction === "LONG" ? colors.up : colors.down }]}>{trade.direction}</Text>
+                      </View>
+                      <Text style={[s.reviewCoin, { color: colors.foreground }]}>{COIN_LABEL[trade.coin]}/{trade.timeframe}</Text>
+                      <Text style={[s.reviewPnl, { color: trade.pnl >= 0 ? colors.up : colors.down }]}>{fmt$(trade.pnl)}</Text>
+                    </View>
+                    {trade.tradeReview && (
+                      <Text style={[s.reviewText, { color: colors.mutedForeground }]}>{trade.tradeReview}</Text>
+                    )}
+                    <Text style={[s.reviewMeta, { color: colors.mutedForeground }]}>
+                      {new Date(trade.closedAt).toLocaleDateString()} · {fmtDur(trade.duration)} · Q:{trade.signalQuality} C:{trade.confidence}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </View>
+          </>
+        )}
+
+        {/* ── SIGNALS TAB ───────────────────────────────────── */}
+        {activeTab === "signals" && (
+          <>
+            <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+              <Text style={[s.cardTitle, { color: colors.mutedForeground }]}>SIGNAL ACCURACY</Text>
+              {analytics.coinAccuracy.length === 0 ? (
+                <Text style={[s.emptyText, { color: colors.mutedForeground }]}>
+                  No signal-followed trades yet. Enable Signal Follow Mode and let the system trade automatically.
+                </Text>
+              ) : (
+                analytics.coinAccuracy.map((c) => {
+                  const pct = c.total > 0 ? (c.wins / c.total) * 100 : 0;
+                  const color = pct >= 60 ? colors.up : pct >= 45 ? colors.wait : colors.down;
+                  return (
+                    <View key={c.coin} style={[s.sigAccRow, { borderBottomColor: colors.border }]}>
+                      <Text style={[s.sigAccCoin, { color: colors.foreground }]}>{COIN_LABEL[c.coin]}/USDT</Text>
+                      <Text style={[s.sigAccTotal, { color: colors.mutedForeground }]}>{c.total} trades</Text>
+                      <View style={[s.sigAccBar, { backgroundColor: colors.border }]}>
+                        <View style={[s.sigAccFill, { width: `${Math.min(100, pct)}%`, backgroundColor: color }]} />
+                      </View>
+                      <Text style={[s.sigAccPct, { color }]}>{c.total > 0 ? `${pct.toFixed(0)}%` : "—"}</Text>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+            <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+              <Text style={[s.cardTitle, { color: colors.mutedForeground }]}>HIGHLIGHTS</Text>
+              <View style={s.statsGrid}>
+                <StatCell label="Most Profitable" value={analytics.mostProfitableCoin} color={colors.up} colors={colors} />
+                <StatCell label="Most Accurate"   value={analytics.mostAccurateCoin}   color={colors.primary} colors={colors} />
+                <StatCell label="Signal Trades"   value={`${history.filter((t) => t.signalFollowed).length}`} colors={colors} />
+                <StatCell label="Manual Trades"   value={`${history.filter((t) => !t.signalFollowed).length}`} colors={colors} />
+              </View>
+            </View>
+            <View style={[s.noteCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[s.noteText, { color: colors.mutedForeground }]}>
+                Signal accuracy is tracked only for auto-followed trades. Manual trades are excluded from signal statistics.
+              </Text>
+            </View>
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -1043,6 +1286,8 @@ const s = StyleSheet.create({
 
   noteCard:   { borderRadius: 10, borderWidth: 1, padding: 12 },
   noteText:   { fontSize: 10, fontFamily: "Inter_400Regular", lineHeight: 15, textAlign: "center" },
+  followNoteContainer: { borderRadius: 8, padding: 8 },
+  followNotePersistent: { fontSize: 10, fontFamily: "Inter_500Medium" },
 
   /* Auto Trade Mode */
   atCoinsGrid:  { flexDirection: "row", gap: 6 },
@@ -1065,4 +1310,20 @@ const s = StyleSheet.create({
 
   atNoneCard:   { borderRadius: 8, padding: 10 },
   atNoneText:   { fontSize: 10, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 15 },
+
+  /* Regime styles */
+  regimeHeader: { alignItems: "center" },
+  regimeName:   { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 4 },
+  regimeConf:   { fontSize: 11, fontFamily: "Inter_500Medium" },
+  regimeRow:    { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1 },
+  regimeLabel:  { flex: 1, fontSize: 12, fontFamily: "Inter_500Medium" },
+  regimeStat:   { fontSize: 10, fontFamily: "Inter_400Regular", marginLeft: 12 },
+
+  /* Review styles */
+  reviewItem:   { paddingVertical: 12, borderBottomWidth: 1 },
+  reviewHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
+  reviewCoin:   { fontSize: 12, fontFamily: "Inter_600SemiBold", flex: 1 },
+  reviewPnl:    { fontSize: 14, fontFamily: "Inter_700Bold" },
+  reviewText:   { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16, marginBottom: 4 },
+  reviewMeta:   { fontSize: 9, fontFamily: "Inter_400Regular" },
 });
