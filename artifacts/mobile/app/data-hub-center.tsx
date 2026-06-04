@@ -16,7 +16,7 @@ import {
   DataConfidence,
   SystemStatus,
   ErrorEntry,
-} from '../../lib/services/data-hub';
+} from '../../lib/services/data-hub/types';
 
 // ============================================================================
 // Components

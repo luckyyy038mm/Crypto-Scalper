@@ -59,6 +59,7 @@ function RootLayoutNav() {
         name="market-scanner"
         options={{ headerShown: false, animation: "slide_from_right" }}
       />
+      {/* Data Hub Center page - available at /data-hub-center */}
     </Stack>
   );
 }

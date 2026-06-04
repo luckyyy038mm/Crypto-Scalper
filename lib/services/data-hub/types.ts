@@ -1,13 +1,9 @@
 /**
- * Market Data Hub - Types
+ * MarketDataHub Types
  * 
  * Centralized type definitions for the Market Data Hub system.
- * All market data types flow through this single source.
+ * These types ensure consistency across all data consumers.
  */
-
-// ============================================================================
-// Core Data Types
-// ============================================================================
 
 export type Symbol = 'BTCUSDT' | 'ETHUSDT' | 'SOLUSDT' | 'XRPUSDT';
 
@@ -62,12 +58,6 @@ export interface FundingData {
   timestamp: number;
 }
 
-export interface OpenInterestData {
-  symbol: Symbol;
-  openInterest: number;
-  timestamp: number;
-}
-
 export interface TradeEntry {
   symbol: Symbol;
   time: number;
@@ -78,21 +68,6 @@ export interface TradeEntry {
   tradeId: number;
 }
 
-export interface TickerData {
-  symbol: Symbol;
-  price: number;
-  priceChange: number;
-  priceChangePercent: number;
-  quoteVolume: number;
-  high24h: number;
-  low24h: number;
-  openPrice: number;
-}
-
-// ============================================================================
-// Connection & Status Types
-// ============================================================================
-
 export interface ConnectionStatus {
   connected: boolean;
   lastConnected: number | null;
@@ -102,7 +77,7 @@ export interface ConnectionStatus {
 }
 
 export interface DataFreshness {
-  price: number | null;        // milliseconds since last update
+  price: number | null;
   orderBook: number | null;
   funding: number | null;
   openInterest: number | null;
@@ -111,19 +86,15 @@ export interface DataFreshness {
 }
 
 export interface DataConfidence {
-  score: number;              // 0-100
-  connectionHealth: number;   // 0-100
-  dataFreshness: number;      // 0-100
-  synchronization: number;      // 0-100
-  errorRate: number;           // 0-100 (inverse)
-  latency: number;             // milliseconds
+  score: number;
+  connectionHealth: number;
+  dataFreshness: number;
+  synchronization: number;
+  errorRate: number;
+  latency: number;
 }
 
 export type FreshnessStatus = 'live' | 'warning' | 'delayed' | 'disconnected';
-
-// ============================================================================
-// Aggregated Metrics
-// ============================================================================
 
 export interface MarketMetrics {
   buyPressure: number;
@@ -134,10 +105,6 @@ export interface MarketMetrics {
   bidDepthUSD: number;
   askDepthUSD: number;
 }
-
-// ============================================================================
-// Complete Market Data
-// ============================================================================
 
 export interface MarketData {
   symbol: Symbol;
@@ -162,19 +129,7 @@ export interface MarketData {
   lastUpdate: number;
 }
 
-// ============================================================================
-// Subscription & Configuration Types
-// ============================================================================
-
-export type DataType = 
-  | 'price' 
-  | 'candle' 
-  | 'orderbook' 
-  | 'funding' 
-  | 'openInterest' 
-  | 'trade' 
-  | 'ticker' 
-  | 'markPrice';
+export type DataType = 'price' | 'candle' | 'orderbook' | 'funding' | 'openInterest' | 'trade' | 'ticker' | 'markPrice';
 
 export interface Subscriber {
   id: string;
@@ -192,18 +147,12 @@ export interface MarketDataUpdate {
 }
 
 export interface DataHubConfig {
-  binanceWsUrl: string;
-  binanceRestUrl: string;
   reconnectInterval: number;
   heartbeatInterval: number;
   maxReconnectAttempts: number;
   cacheTimeout: number;
   confidenceThreshold: number;
 }
-
-// ============================================================================
-// System Status Types
-// ============================================================================
 
 export interface SystemStatus {
   isRunning: boolean;
@@ -222,10 +171,6 @@ export interface ErrorEntry {
   message: string;
   symbol?: Symbol;
 }
-
-// ============================================================================
-// Default Values
-// ============================================================================
 
 export const DEFAULT_MARKET_DATA: MarketData = {
   symbol: 'BTCUSDT',
@@ -259,44 +204,9 @@ export const DEFAULT_MARKET_DATA: MarketData = {
 };
 
 export const DEFAULT_CONFIG: DataHubConfig = {
-  binanceWsUrl: 'wss://fstream.binance.com/ws',
-  binanceRestUrl: 'https://fapi.binance.com',
   reconnectInterval: 3000,
   heartbeatInterval: 30000,
   maxReconnectAttempts: 10,
   cacheTimeout: 5000,
   confidenceThreshold: 50,
-};
-
-// ============================================================================
-// Default Configuration
-// ============================================================================
-
-export const DEFAULT_PRICE_DATA: PriceData = {
-  symbol: 'BTCUSDT',
-  price: 0,
-  priceChange: 0,
-  priceChangePercent: 0,
-  high24h: 0,
-  low24h: 0,
-  volume24h: 0,
-  quoteVolume24h: 0,
-  timestamp: 0,
-};
-
-export const DEFAULT_FUNDING_DATA: FundingData = {
-  symbol: 'BTCUSDT',
-  fundingRate: 0,
-  markPrice: 0,
-  indexPrice: 0,
-  nextFundingTime: 0,
-  timestamp: 0,
-};
-
-export const DEFAULT_ORDERBOOK_DATA: OrderBookData = {
-  symbol: 'BTCUSDT',
-  bids: [],
-  asks: [],
-  lastUpdateId: 0,
-  timestamp: 0,
 };
