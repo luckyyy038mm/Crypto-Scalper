@@ -525,8 +525,14 @@ export default function PaperTradingScreen() {
   }, [adjustTakeProfit]);
 
   const handleReset = () => {
-    Alert.alert("Reset Account", `This will reset your balance to $${STARTING_BALANCE} and clear all trades. Continue?`,
-      [{ text: "Cancel", style: "cancel" }, { text: "Reset", style: "destructive", onPress: resetAccount }]);
+    Alert.alert(
+      "Reset Account",
+      `Current Balance: ${fmt$(analytics.totalBalance)}\nWin Rate: ${analytics.winRate > 0 ? `${analytics.winRate.toFixed(1)}%` : "—"}\nTotal Trades: ${analytics.totalTrades}\nTotal PnL: ${fmt$(analytics.totalPnl)}\n\n⚠️ This will reset balance to $${STARTING_BALANCE}. Trade history will be preserved.\n\nContinue?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Reset", style: "destructive", onPress: () => resetAccount(true) },
+      ]
+    );
   };
 
   /* Signal color */
