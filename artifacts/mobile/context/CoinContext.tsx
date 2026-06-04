@@ -1,6 +1,9 @@
-import React, { createContext, useCallback, useContext, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { CoinSymbol } from "@/constants/coins";
+
+const COIN_STORAGE_KEY = "pt_selected_coin";
 
 interface CoinContextValue {
   selectedCoin: CoinSymbol;
@@ -13,10 +16,20 @@ const CoinContext = createContext<CoinContextValue>({
 });
 
 export function CoinProvider({ children }: { children: React.ReactNode }) {
-  const [selectedCoin, setSelectedCoin] = useState<CoinSymbol>("BTCUSDT");
+  const [selectedCoin, setSelectedCoinState] = useState<CoinSymbol>("BTCUSDT");
+
+  // Load persisted coin on mount
+  useEffect(() => {
+    AsyncStorage.getItem(COIN_STORAGE_KEY).then((raw) => {
+      if (raw && ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"].includes(raw)) {
+        setSelectedCoinState(raw as CoinSymbol);
+      }
+    });
+  }, []);
 
   const setCoin = useCallback((coin: CoinSymbol) => {
-    setSelectedCoin(coin);
+    setSelectedCoinState(coin);
+    AsyncStorage.setItem(COIN_STORAGE_KEY, coin).catch(() => {});
   }, []);
 
   return (

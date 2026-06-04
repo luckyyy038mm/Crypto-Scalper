@@ -46,12 +46,21 @@ import {
 
 const SIGNAL_FOLLOW_KEY = "pt_signal_follow_state";
 
+export type ConfigTimeframe = "1m" | "5m" | "15m" | "1h" | "4h";
+export type ConfigDirection = "BOTH" | "LONG" | "SHORT";
+
 interface PersistedSignalFollow {
   enabled: boolean;
   mode: TradeMode;
   leverage: number;
   riskPct: number;
   selectedCoins: PaperCoin[];
+  // Configurable Signal Engine Settings
+  minQuality: number;
+  minConfidence: number;
+  allowedTimeframes: ConfigTimeframe[];
+  allowedDirection: ConfigDirection;
+  autoTimeframe: boolean;
 }
 
 const DEFAULT_SF_STATE: PersistedSignalFollow = {
@@ -60,6 +69,11 @@ const DEFAULT_SF_STATE: PersistedSignalFollow = {
   leverage: 5,
   riskPct: 10,
   selectedCoins: [...PAPER_COINS],
+  minQuality: 42,
+  minConfidence: 40,
+  allowedTimeframes: ["15m", "1h", "4h"],
+  allowedDirection: "BOTH",
+  autoTimeframe: true,
 };
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
@@ -469,10 +483,8 @@ export default function PaperTradingScreen() {
   const topPad   = Platform.OS === "web" ? 60 : insets.top;
 
   const [activeTab, setActiveTab]       = useState<Tab>("trade");
-  const [selectedCoin, setSelectedCoin] = useState<PaperCoin>("BTCUSDT");
-  
-  // Persistent Signal Follow State
-  const [sfState, setSfState] = useState<PersistedSignalFollow>(DEFAULT_SF_STATE);
+  // Use CoinContext for persistent coin selection
+  const { selectedCoin, setCoin } = useSelectedCoin();
   const [autoTradeEnabled, setAutoTrade] = useState(false);
   const [autoThreshold, setAutoThreshold] = useState(62);
   
@@ -553,17 +565,28 @@ export default function PaperTradingScreen() {
 
   /* Signal follow — trigger when signal changes (persistent) */
   const prevSignal = prevSignalRef.current;
-  if (signalFollow && currentSignal !== "WAIT" && currentSignal !== prevSignal) {
+  const confidence = Math.round((Math.abs(signalAnalysis.totalScore) / signalAnalysis.maxTotalScore) * 100);
+  const quality = signalAnalysis.signalQualityScore ?? 0;
+  const timeframe = signalAnalysis.signalTimeframe;
+  
+  // Check if signal meets configurable criteria
+  const meetsQualityThreshold = quality >= sfState.minQuality;
+  const meetsConfidenceThreshold = confidence >= sfState.minConfidence;
+  const meetsTimeframeThreshold = sfState.allowedTimeframes.includes(timeframe as ConfigTimeframe);
+  const meetsDirectionThreshold = sfState.allowedDirection === "BOTH" || sfState.allowedDirection === (currentSignal as "LONG" | "SHORT");
+  
+  if (signalFollow && currentSignal !== "WAIT" && currentSignal !== prevSignal 
+      && meetsQualityThreshold && meetsConfidenceThreshold && meetsTimeframeThreshold && meetsDirectionThreshold) {
     prevSignalRef.current = currentSignal;
     followSignal({ 
-      coin: selectedCoin, 
+      coin: selectedCoin as PaperCoin, 
       signal: currentSignal as "LONG" | "SHORT", 
       leverage: followLeverage, 
       riskPct: followRisk,
-      timeframe: sfState.mode === "scalper" ? "5m" : "1h",
-      signalQuality: signalAnalysis.signalQualityScore ?? 50,
-      confidence: Math.round((Math.abs(signalAnalysis.totalScore) / signalAnalysis.maxTotalScore) * 100),
-      probability: signalAnalysis.signalQualityScore ?? 50,
+      timeframe: sfState.autoTimeframe ? (timeframe as ConfigTimeframe) : (sfState.mode === "scalper" ? "5m" : "1h"),
+      signalQuality: quality,
+      confidence: confidence,
+      probability: quality,
       marketRegime: btcRegime.regime,
     });
   } else if (currentSignal !== prevSignal) {
@@ -699,12 +722,30 @@ export default function PaperTradingScreen() {
                   trackColor={{ false: colors.border, true: colors.primary + "88" }}
                 />
               </View>
-              {/* Current signal */}
+              {/* Current signal with quality info */}
               <View style={s.followSignal}>
-                <Text style={[s.followSigLabel, { color: colors.mutedForeground }]}>Current Signal</Text>
-                <View style={[s.signalBadge, { backgroundColor: sigColor + "22", borderColor: sigColor + "55" }]}>
-                  <Text style={[s.signalText, { color: sigColor }]}>{currentSignal}</Text>
+                <View style={s.followSigLeft}>
+                  <Text style={[s.followSigLabel, { color: colors.mutedForeground }]}>Signal</Text>
+                  <View style={[s.signalBadge, { backgroundColor: sigColor + "22", borderColor: sigColor + "55" }]}>
+                    <Text style={[s.signalText, { color: sigColor }]}>{currentSignal}</Text>
+                  </View>
                 </View>
+                {signalAnalysis.signalQualityScore > 0 && (
+                  <View style={s.followSigRight}>
+                    <Text style={[s.followSigLabel, { color: colors.mutedForeground }]}>Quality</Text>
+                    <Text style={[s.followQualText, { color: signalAnalysis.signalQualityScore >= 60 ? colors.up : signalAnalysis.signalQualityScore >= 40 ? colors.wait : colors.down }]}>
+                      {signalAnalysis.signalQualityScore}/100
+                    </Text>
+                  </View>
+                )}
+                {signalAnalysis.totalScore !== 0 && (
+                  <View style={s.followSigRight}>
+                    <Text style={[s.followSigLabel, { color: colors.mutedForeground }]}>Score</Text>
+                    <Text style={[s.followQualText, { color: signalAnalysis.totalScore > 0 ? colors.up : colors.down }]}>
+                      {signalAnalysis.totalScore > 0 ? "+" : ""}{signalAnalysis.totalScore}/{signalAnalysis.maxTotalScore}
+                    </Text>
+                  </View>
+                )}
               </View>
               {signalFollow && (
                 <View style={s.followConfig}>
@@ -733,7 +774,7 @@ export default function PaperTradingScreen() {
                     </View>
                   </View>
                   <View style={s.followRow}>
-                    <Text style={[s.followConfigLabel, { color: colors.mutedForeground }]}>Risk per trade</Text>
+                    <Text style={[s.followConfigLabel, { color: colors.mutedForeground }]}>Risk</Text>
                     <View style={s.levRowSmall}>
                       {[5, 10, 15, 20].map((r) => (
                         <Pressable key={r} onPress={() => persistSfState({ ...sfState, riskPct: r })}
@@ -744,8 +785,104 @@ export default function PaperTradingScreen() {
                       ))}
                     </View>
                   </View>
+                  
+                  {/* Signal Engine Settings */}
+                  <View style={[s.signalSettingsSection, { borderTopColor: colors.border }]}>
+                    <Text style={[s.signalSettingsTitle, { color: colors.foreground }]}>⚙️ Signal Engine</Text>
+                    
+                    {/* Min Quality */}
+                    <View style={s.settingRow}>
+                      <Text style={[s.settingLabel, { color: colors.mutedForeground }]}>Min Quality</Text>
+                      <View style={s.levRowSmall}>
+                        {[35, 42, 52, 62, 72].map((q) => (
+                          <Pressable key={q} onPress={() => persistSfState({ ...sfState, minQuality: q })}
+                            style={[s.levBtnSm, { borderColor: colors.border }, sfState.minQuality === q && { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
+                          >
+                            <Text style={[s.levTextSm, { color: sfState.minQuality === q ? colors.primary : colors.mutedForeground }]}>{q}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                    
+                    {/* Min Confidence */}
+                    <View style={s.settingRow}>
+                      <Text style={[s.settingLabel, { color: colors.mutedForeground }]}>Min Confidence</Text>
+                      <View style={s.levRowSmall}>
+                        {[30, 40, 50, 60, 70].map((c) => (
+                          <Pressable key={c} onPress={() => persistSfState({ ...sfState, minConfidence: c })}
+                            style={[s.levBtnSm, { borderColor: colors.border }, sfState.minConfidence === c && { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
+                          >
+                            <Text style={[s.levTextSm, { color: sfState.minConfidence === c ? colors.primary : colors.mutedForeground }]}>{c}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                    
+                    {/* Direction */}
+                    <View style={s.settingRow}>
+                      <Text style={[s.settingLabel, { color: colors.mutedForeground }]}>Direction</Text>
+                      <View style={s.levRowSmall}>
+                        {(["BOTH", "LONG", "SHORT"] as const).map((d) => (
+                          <Pressable key={d} onPress={() => persistSfState({ ...sfState, allowedDirection: d })}
+                            style={[s.levBtnSm, { borderColor: colors.border }, sfState.allowedDirection === d && { backgroundColor: colors.primary + "22", borderColor: colors.primary }]}
+                          >
+                            <Text style={[s.levTextSm, { color: sfState.allowedDirection === d ? colors.primary : colors.mutedForeground }]}>{d}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                    
+                    {/* Auto Timeframe */}
+                    <View style={s.settingRow}>
+                      <Text style={[s.settingLabel, { color: colors.mutedForeground }]}>Auto TF</Text>
+                      <Switch
+                        value={sfState.autoTimeframe}
+                        onValueChange={(v) => persistSfState({ ...sfState, autoTimeframe: v })}
+                        thumbColor={sfState.autoTimeframe ? colors.primary : "#6B7280"}
+                        trackColor={{ false: colors.border, true: colors.primary + "88" }}
+                      />
+                    </View>
+                    
+                    {/* Timeframes */}
+                    <View style={s.settingRow}>
+                      <Text style={[s.settingLabel, { color: colors.mutedForeground }]}>Timeframes</Text>
+                      <View style={s.levRowSmall}>
+                        {(["1m", "5m", "15m", "1h", "4h"] as const).map((tf) => (
+                          <Pressable key={tf} onPress={() => {
+                            const current = sfState.allowedTimeframes;
+                            const next = current.includes(tf) 
+                              ? current.filter(t => t !== tf) 
+                              : [...current, tf];
+                            persistSfState({ ...sfState, allowedTimeframes: next });
+                          }}
+                            style={[s.levBtnSm, { borderColor: colors.border }, sfState.allowedTimeframes.includes(tf) && { backgroundColor: colors.up + "22", borderColor: colors.up }]}
+                          >
+                            <Text style={[s.levTextSm, { color: sfState.allowedTimeframes.includes(tf) ? colors.up : colors.mutedForeground }]}>{tf}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                  
+                  {/* Signal Details when active */}
+                  {signalAnalysis.ready && signalAnalysis.factors.length > 0 && (
+                    <View style={[s.followFactors, { borderTopColor: colors.border }]}>
+                      <Text style={[s.followFactorsTitle, { color: colors.mutedForeground }]}>Signal Factors</Text>
+                      <View style={s.factorGrid}>
+                        {signalAnalysis.factors.slice(0, 4).map((f) => {
+                          const fColor = f.sentiment === "bullish" ? colors.up : f.sentiment === "bearish" ? colors.down : colors.mutedForeground;
+                          return (
+                            <View key={f.shortName} style={[s.factorItem, { borderColor: colors.border }]}>
+                              <Text style={[s.factorName, { color: colors.mutedForeground }]}>{f.shortName}</Text>
+                              <Text style={[s.factorScore, { color: fColor }]}>{f.score > 0 ? "+" : ""}{f.score}</Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
                   <View style={[s.followNoteContainer, { backgroundColor: colors.up + "15", padding: 8, borderRadius: 8, marginTop: 8 }]}>
-                    <Text style={[s.followNotePersistent, { color: colors.up }]}>✓ Signal Follow is persistent! It stays on when you leave this screen.</Text>
+                    <Text style={[s.followNotePersistent, { color: colors.up }]}>✓ Signal Follow is persistent!</Text>
                   </View>
                 </View>
               )}
@@ -1287,6 +1424,21 @@ const s = StyleSheet.create({
 
   noteCard:   { borderRadius: 10, borderWidth: 1, padding: 12 },
   noteText:   { fontSize: 10, fontFamily: "Inter_400Regular", lineHeight: 15, textAlign: "center" },
+  followSignal: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 12 },
+  followSigLeft: { alignItems: "center", gap: 4 },
+  followSigRight: { alignItems: "center", gap: 4 },
+  followSigLabel: { fontSize: 9, fontFamily: "Inter_500Medium" },
+  followQualText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  followFactors: { borderTopWidth: 1, paddingTop: 10, marginTop: 10 },
+  followFactorsTitle: { fontSize: 10, fontFamily: "Inter_600SemiBold", marginBottom: 8 },
+  factorGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  factorItem: { width: "47%", flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6, paddingHorizontal: 8, borderWidth: 1, borderRadius: 6 },
+  factorName: { fontSize: 9, fontFamily: "Inter_500Medium" },
+  factorScore: { fontSize: 11, fontFamily: "Inter_700Bold" },
+  signalSettingsSection: { borderTopWidth: 1, paddingTop: 12, marginTop: 8 },
+  signalSettingsTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", marginBottom: 10 },
+  settingRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  settingLabel: { fontSize: 11, fontFamily: "Inter_500Medium", flex: 1 },
   followNoteContainer: { borderRadius: 8, padding: 8 },
   followNotePersistent: { fontSize: 10, fontFamily: "Inter_500Medium" },
 
