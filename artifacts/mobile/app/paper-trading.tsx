@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useMultiCoinData } from "@/context/TradingContext";
+import { useMultiCoinData, useTradingData } from "@/context/TradingContext";
 import { useBinanceData } from "@/hooks/useBinanceData";
 import { useAutoTrader } from "@/hooks/useAutoTrader";
 import { useColors } from "@/hooks/useColors";
@@ -528,8 +528,9 @@ export default function PaperTradingScreen() {
   const allEngines = useMultiCoinData();
   const autoState  = useAutoTrader(allEngines, autoTradeEnabled, autoThreshold);
 
-  /* Signal for selected coin */
-  const signalAnalysis = useSignalAnalysis(currentData, selectedCoin);
+  /* Signal for selected coin - use TradingContext for full signal analysis with extras */
+  const engine = useTradingData();
+  const signalAnalysis = engine.analysis;
   const currentSignal  = signalAnalysis.signal;
 
   const {
@@ -561,8 +562,8 @@ export default function PaperTradingScreen() {
       riskPct: followRisk,
       timeframe: sfState.mode === "scalper" ? "5m" : "1h",
       signalQuality: signalAnalysis.signalQualityScore ?? 50,
-      confidence: signalAnalysis.totalScore ?? 50,
-      probability: signalAnalysis.totalScore ?? 50,
+      confidence: Math.round((Math.abs(signalAnalysis.totalScore) / signalAnalysis.maxTotalScore) * 100),
+      probability: signalAnalysis.signalQualityScore ?? 50,
       marketRegime: btcRegime.regime,
     });
   } else if (currentSignal !== prevSignal) {
