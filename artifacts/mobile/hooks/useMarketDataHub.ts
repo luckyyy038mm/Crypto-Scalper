@@ -22,7 +22,7 @@ import {
   DataFreshness,
   DataConfidence,
   SystemStatus,
-} from '../../lib/services/data-hub';
+} from '@lib/services/data-hub';
 
 /**
  * Get complete market data for a symbol
