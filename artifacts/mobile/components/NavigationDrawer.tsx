@@ -33,6 +33,10 @@ const MAIN_ITEMS: NavItem[] = [
   { icon: "grid",        label: "Footprint Chart",     sublabel: "Bid/ask volume at each price level", route: "/footprint" },
 ];
 
+const TRADING_VIEW_ITEMS: NavItem[] = [
+  { icon: "tv", label: "Trading View", sublabel: "Advanced charts & indicators", route: "/trading-view" },
+];
+
 const STATS_ITEMS: NavItem[] = [
   { icon: "book",      label: "Trade Journal",   sublabel: "Log & review your trades",     route: "/journal" },
   { icon: "activity",  label: "Performance",     sublabel: "Stats, streaks & analytics",   route: "/performance" },
@@ -150,6 +154,8 @@ export default function NavigationDrawer() {
           showsVerticalScrollIndicator={true}
         >
           {renderSection("TRADING", MAIN_ITEMS)}
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          {renderSection("TRADING VIEW", TRADING_VIEW_ITEMS)}
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           {renderSection("STATISTICS & MANAGEMENT", STATS_ITEMS)}
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
